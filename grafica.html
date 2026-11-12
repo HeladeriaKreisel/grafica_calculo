@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulación Dron 3D — Cálculo Vectorial</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- Three.js y OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #0a0f1d;
+      --card-bg: rgba(17, 24, 39, 0.85);
+      --card-border: rgba(255, 255, 255, 0.1);
+      --primary: #3b82f6;
+      --primary-glow: rgba(59, 130, 246, 0.4);
+      --emerald: #10b981;
+      --rose: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 10% 10%, rgba(59, 130, 246, 0.15) 0, transparent 40%),
+        radial-gradient(circle at 90% 90%, rgba(16, 185, 129, 0.1) 0, transparent 40%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px;
+      overflow-x: hidden;
+    }
+
+    header { text-align: center; max-width: 900px; margin-bottom: 20px; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      border-radius: 9999px;
+      color: #60a5fa;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .badge-dot {
+      width: 8px; height: 8px;
+      background: #10b981; border-radius: 50%;
+      box-shadow: 0 0 10px #10b981;
+      animation: pulse 1.5s infinite;
+    }
+
+    h1 {
+      font-size: clamp(1.8rem, 3.8vw, 2.3rem);
+      font-weight: 800;
+      background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+
+    .subtitle { color: var(--text-muted); font-size: 0.95rem; }
+
+    .formula-pill {
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 3px 8px;
+      border-radius: 6px;
+      color: #38bdf8;
+      font-weight: 600;
+    }
+
+    .dashboard {
+      width: 100%;
+      max-width: 1220px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    @media (min-width: 1024px) {
+      .dashboard { grid-template-columns: 1fr 340px; }
+    }
+
+    .viewer-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    #canvas-container {
+      width: 100%;
+      height: 520px;
+      border-radius: 14px;
+      overflow: hidden;
+      position: relative;
+      background: #060913;
+      cursor: crosshair;
+    }
+
+    #canvas-container canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+    .canvas-overlay-hint {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      color: #94a3b8;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* TOOLTIP FLOTANTE DE COORDENADAS */
+    #tooltip-hover {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #38bdf8;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8), 0 0 12px rgba(56, 189, 248, 0.3);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.78rem;
+      color: #f8fafc;
+      z-index: 30;
+      backdrop-filter: blur(8px);
+      transform: translate(14px, -50%);
+      white-space: nowrap;
+    }
+
+    #tooltip-hover .tt-title {
+      color: #38bdf8;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 5px;
+      font-size: 0.75rem;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding-bottom: 3px;
+    }
+
+    #tooltip-hover .tt-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 3px;
+    }
+
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+      padding: 12px 16px;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .btn-group { display: flex; gap: 8px; }
+
+    button {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 600;
+      font-size: 0.88rem;
+      padding: 9px 18px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      box-shadow: 0 4px 14px var(--primary-glow);
+    }
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .slider-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .slider-box label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input[type=range] {
+      flex: 1;
+      accent-color: #3b82f6;
+      cursor: pointer;
+    }
+
+    .sidebar { display: flex; flex-direction: column; gap: 14px; }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      backdrop-filter: blur(16px);
+      padding: 16px 18px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 4px; height: 100%;
+      background: var(--accent-color, #3b82f6);
+    }
+
+    .stat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .stat-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #ffffff;
+    }
+
+    .stat-sub { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+
+    .legend-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      backdrop-filter: blur(16px);
+      padding: 16px 18px;
+    }
+
+    .legend-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+      color: #ffffff;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+      font-size: 0.82rem;
+      color: #cbd5e1;
+    }
+
+    .legend-item:last-child { margin-bottom: 0; }
+    .legend-color { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.9); }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="badge">
+      <span class="badge-dot"></span>
+      Cálculo Vectorial — Universidad de La Salle (2026-2)
+    </div>
+    <h1>Simulación 3D Dinámica del Dron</h1>
+    <p class="subtitle">
+      Problema 2 (Pareja 2) &nbsp;|&nbsp; Curva: <span class="formula-pill">r(t) = ⟨ t, &nbsp;(2√2/3)t^(3/2), &nbsp;t²/2 ⟩</span>
+    </p>
+  </header>
+
+  <div class="dashboard">
+
+    <div class="viewer-card">
+      <div id="canvas-container">
+        <div class="canvas-overlay-hint">🖱️ Pasa el mouse sobre la curva para inspeccionar coordenadas</div>
+        
+        <!-- TOOLTIP FLOTANTE -->
+        <div id="tooltip-hover">
+          <div class="tt-title" id="tt-title">Punto en Trayectoria</div>
+          <div class="tt-row"><span>Tiempo:</span><b id="tt-t" style="color:#60a5fa;">t = 0.50 h</b></div>
+          <div class="tt-row"><span>X:</span><span id="tt-x">0.500 km</span></div>
+          <div class="tt-row"><span>Y:</span><span id="tt-y">0.333 km</span></div>
+          <div class="tt-row"><span>Z:</span><span id="tt-z">0.125 km</span></div>
+          <div class="tt-row"><span>Rapidez:</span><b id="tt-speed" style="color:#34d399;">1.50 km/h</b></div>
+        </div>
+      </div>
+
+      <div class="controls-bar">
+        <div class="btn-group">
+          <button id="btn-toggle" class="btn-primary" onclick="togglePlay()">
+            <span id="btn-icon">⏸</span> <span id="btn-text">Pausar</span>
+          </button>
+          <button class="btn-secondary" onclick="resetSim()">
+            <span>↺</span> Reiniciar
+          </button>
+        </div>
+
+        <div class="slider-box">
+          <label>Tiempo t:</label>
+          <input type="range" id="time-slider" min="0" max="1" step="0.002" value="0" oninput="onSliderChange(this.value)">
+          <span id="slider-label" style="font-family: 'JetBrains Mono'; font-size: 0.85rem; min-width: 48px; text-align: right;">0.00 h</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+
+      <div class="stat-card" style="--accent-color: #3b82f6;">
+        <div class="stat-header">
+          <span class="stat-title">Tiempo Transcurrido</span>
+          <span>⏱️</span>
+        </div>
+        <div class="stat-value" id="val-time">0.00 h</div>
+        <div class="stat-sub">Intervalo: 0 ≤ t ≤ 1 h</div>
+      </div>
+
+      <div class="stat-card" style="--accent-color: #10b981;">
+        <div class="stat-header">
+          <span class="stat-title">Rapidez Instantánea |r'(t)|</span>
+          <span>⚡</span>
+        </div>
+        <div class="stat-value" id="val-speed" style="color: #34d399;">1.00 km/h</div>
+        <div class="stat-sub">Simplificación exacta: 1 + t km/h</div>
+      </div>
+
+      <div class="stat-card" style="--accent-color: #f43f5e;">
+        <div class="stat-header">
+          <span class="stat-title">Posición del Dron r(t)</span>
+          <span>📍</span>
+        </div>
+        <div class="stat-value" id="val-pos" style="font-size: 1.15rem; color: #fda4af;">(0.00, 0.00, 0.00)</div>
+        <div class="stat-sub">Coordenadas espaciales (km)</div>
+      </div>
+
+      <div class="stat-card" style="--accent-color: #f59e0b;">
+        <div class="stat-header">
+          <span class="stat-title">Vector Velocidad r'(t)</span>
+          <span>🧭</span>
+        </div>
+        <div class="stat-value" id="val-vel" style="font-size: 1.15rem; color: #fde68a;">⟨1.00, 0.00, 0.00⟩</div>
+        <div class="stat-sub">r'(t) = ⟨1, √(2t), t⟩ km/h</div>
+      </div>
+
+      <div class="legend-card">
+        <div class="legend-title">Elementos en la Escena</div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #3b82f6;"></div>
+          <span>Trayectoria real recorrida <b>r(t)</b></span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #475569; border: 1px dashed #94a3b8;"></div>
+          <span>Ruta planificada proyectada</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #ef4444; border-radius: 50%;"></div>
+          <span>Dron (esfera roja con halo)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #10b981;"></div>
+          <span>Vector velocidad <b>r'(t)</b> tangente</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background: #f43f5e; border-top: 2px dashed #f43f5e;"></div>
+          <span>Recta tangente en t = 1 (inercia)</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const container = document.getElementById('canvas-container');
+    const tooltip = document.getElementById('tooltip-hover');
+    let width = container.clientWidth;
+    let height = container.clientHeight;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x060913);
+
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+    camera.position.set(2.8, 2.2, 2.8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.target.set(0.5, 0.4, 0.3);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    dirLight.position.set(5, 10, 7);
+    scene.add(dirLight);
+
+    const grid = new THREE.GridHelper(2.5, 12, 0x3b82f6, 0x1e293b);
+    grid.position.set(0.5, 0, 0.5);
+    scene.add(grid);
+    scene.add(new THREE.AxesHelper(1.5));
+
+    function evalR(t) {
+      let x = t;
+      let y = (2 * Math.SQRT2 / 3) * Math.pow(t, 1.5);
+      let z = 0.5 * t * t;
+      return new THREE.Vector3(x, z, y);
+    }
+
+    function evalV(t) {
+      let vx = 1.0;
+      let vy = Math.sqrt(2 * Math.max(t, 0.0001));
+      let vz = t;
+      return new THREE.Vector3(vx, vz, vy);
+    }
+
+    const pointsFull = [];
+    const N_POINTS = 300;
+    for (let i = 0; i <= N_POINTS; i++) pointsFull.push(evalR(i / N_POINTS));
+    const geomFull = new THREE.BufferGeometry().setFromPoints(pointsFull);
+    const lineFull = new THREE.Line(geomFull, new THREE.LineDashedMaterial({ color: 0x475569, dashSize: 0.04, gapSize: 0.02 }));
+    lineFull.computeLineDistances();
+    scene.add(lineFull);
+
+    const curvePath = new THREE.CatmullRomCurve3(pointsFull);
+    const tubeGeom = new THREE.TubeGeometry(curvePath, 150, 0.04, 8, false);
+    const tubeMesh = new THREE.Mesh(tubeGeom, new THREE.MeshBasicMaterial({ visible: false }));
+    scene.add(tubeMesh);
+
+    const hoverSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(0.035, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true })
+    );
+    hoverSphere.visible = false;
+    scene.add(hoverSphere);
+
+    const maxRecPoints = 300;
+    const geomRec = new THREE.BufferGeometry();
+    const posRec = new Float32Array(maxRecPoints * 3);
+    geomRec.setAttribute('position', new THREE.BufferAttribute(posRec, 3));
+    const lineRec = new THREE.Line(geomRec, new THREE.LineBasicMaterial({ color: 0x3b82f6, linewidth: 4 }));
+    scene.add(lineRec);
+
+    const P1 = evalR(1.0);
+    const V1 = evalV(1.0).normalize().multiplyScalar(0.7);
+    const geomTan = new THREE.BufferGeometry().setFromPoints([P1.clone(), P1.clone().add(V1)]);
+    const lineTan = new THREE.Line(geomTan, new THREE.LineDashedMaterial({ color: 0xf43f5e, dashSize: 0.05, gapSize: 0.03 }));
+    lineTan.computeLineDistances();
+    scene.add(lineTan);
+
+    const droneMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.045, 32, 32),
+      new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.2, metalness: 0.8, emissive: 0xdc2626, emissiveIntensity: 0.4 })
+    );
+    scene.add(droneMesh);
+
+    const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 0.35, 0x10b981, 0.1, 0.06);
+    scene.add(arrowHelper);
+
+    // RAYCASTER PARA MOUSE HOVER
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    container.addEventListener('mousemove', (e) => {
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      mouse.x = (mouseX / container.clientWidth) * 2 - 1;
+      mouse.y = -(mouseY / container.clientHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects([tubeMesh, droneMesh]);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        let hitPoint = hit.point;
+
+        let t_hover;
+        if (hit.object === droneMesh) {
+          t_hover = Math.min(t, 1.0);
+          hitPoint = droneMesh.position;
+        } else {
+          t_hover = Math.max(0, Math.min(1, hitPoint.x));
+          hitPoint = evalR(t_hover);
+        }
+
+        hoverSphere.position.copy(hitPoint);
+        hoverSphere.visible = true;
+
+        let mx = t_hover;
+        let my = (2 * Math.SQRT2 / 3) * Math.pow(t_hover, 1.5);
+        let mz = 0.5 * t_hover * t_hover;
+        let speed = 1.0 + t_hover;
+
+        document.getElementById('tt-title').innerText = (hit.object === droneMesh) ? '🎯 Posición del Dron' : '📍 Punto en Trayectoria';
+        document.getElementById('tt-t').innerText = `t = ${t_hover.toFixed(2)} h`;
+        document.getElementById('tt-x').innerText = `${mx.toFixed(3)} km`;
+        document.getElementById('tt-y').innerText = `${my.toFixed(3)} km`;
+        document.getElementById('tt-z').innerText = `${mz.toFixed(3)} km`;
+        document.getElementById('tt-speed').innerText = `${speed.toFixed(3)} km/h`;
+
+        tooltip.style.display = 'block';
+        tooltip.style.left = `${mouseX}px`;
+        tooltip.style.top = `${mouseY}px`;
+      } else {
+        hoverSphere.visible = false;
+        tooltip.style.display = 'none';
+      }
+    });
+
+    container.addEventListener('mouseleave', () => {
+      hoverSphere.visible = false;
+      tooltip.style.display = 'none';
+    });
+
+    let t = 0;
+    let isPlaying = true;
+    const speedScale = 0.25;
+    let lastTime = performance.now();
+
+    function updateElements(curr_t) {
+      const pos = evalR(curr_t);
+      droneMesh.position.copy(pos);
+
+      const vel = evalV(curr_t);
+      arrowHelper.position.copy(pos);
+      arrowHelper.setDirection(vel.clone().normalize());
+      arrowHelper.setLength(0.35 + curr_t * 0.1);
+
+      const numPts = Math.max(2, Math.floor(curr_t * (maxRecPoints - 1)));
+      const positions = lineRec.geometry.attributes.position.array;
+      for (let i = 0; i <= numPts; i++) {
+        let pt = evalR((i / numPts) * curr_t);
+        positions[i * 3] = pt.x;
+        positions[i * 3 + 1] = pt.y;
+        positions[i * 3 + 2] = pt.z;
+      }
+      lineRec.geometry.setDrawRange(0, numPts + 1);
+      lineRec.geometry.attributes.position.needsUpdate = true;
+
+      let mx = curr_t, my = (2 * Math.SQRT2 / 3) * Math.pow(curr_t, 1.5), mz = 0.5 * curr_t * curr_t;
+      let mspeed = 1.0 + curr_t;
+      let mvy = Math.sqrt(2 * Math.max(curr_t, 0.0001)), mvz = curr_t;
+
+      document.getElementById('val-time').innerText = `${curr_t.toFixed(2)} h`;
+      document.getElementById('val-speed').innerText = `${mspeed.toFixed(2)} km/h`;
+      document.getElementById('val-pos').innerText = `(${mx.toFixed(2)}, ${my.toFixed(2)}, ${mz.toFixed(2)})`;
+      document.getElementById('val-vel').innerText = `⟨1.00, ${mvy.toFixed(2)}, ${mvz.toFixed(2)}⟩`;
+
+      document.getElementById('time-slider').value = curr_t;
+      document.getElementById('slider-label').innerText = `${curr_t.toFixed(2)} h`;
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const delta = (now - lastTime) / 1000;
+      lastTime = now;
+
+      if (isPlaying) {
+        t += delta * speedScale;
+        if (t > 1.3) t = 0;
+        updateElements(Math.min(t, 1.0));
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    function togglePlay() {
+      isPlaying = !isPlaying;
+      document.getElementById('btn-icon').innerText = isPlaying ? "⏸" : "▶";
+      document.getElementById('btn-text').innerText = isPlaying ? "Pausar" : "Reanudar";
+    }
+
+    function resetSim() {
+      t = 0;
+      updateElements(0);
+      if (!isPlaying) togglePlay();
+    }
+
+    function onSliderChange(val) {
+      if (isPlaying) togglePlay();
+      t = parseFloat(val);
+      updateElements(t);
+    }
+
+    window.addEventListener('resize', () => {
+      width = container.clientWidth;
+      height = container.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    });
+  </script>
+</body>
+</html>
